@@ -51,9 +51,10 @@ export function render({ model, el }) {
 
                 ctx.save();
 
-                // Convert from matplotlib coords (bottom-left origin) to canvas (top-left origin)
+                // Text coordinates from matplotlib have y increasing downward from bottom of figure
+                // (opposite to path coordinates which have y increasing upward)
                 const canvasX = cmd.x;
-                const canvasY = figureHeight - cmd.y;
+                const canvasY = figureHeight + cmd.y;  // ADD instead of subtract
 
                 console.log("Figure height:", figureHeight);
                 console.log("Text position - mpl coords:", cmd.x, cmd.y);
