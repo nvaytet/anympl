@@ -20,3 +20,17 @@ fig.canvas
 
 fig.canvas.draw()
 ```
+
+## Zoom
+
+To enable interactive zoom:
+
+```python
+# Enable zoom
+fig.canvas.enable_zoom()
+
+# Disable zoom
+fig.canvas.enable_zoom(False)
+```
+
+When zoom is enabled, you can click and drag on the plot to zoom into a region.

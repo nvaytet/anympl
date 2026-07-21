@@ -198,6 +198,7 @@ class FigureCanvasAnyWidget(FigureCanvasBase):
         super().__init__(figure)
 
         self.widget = PlotWidget()
+        self.widget.canvas = self  # Link widget back to canvas
 
     def get_renderer(self, cleared=False):
         w = int(self.figure.bbox.width)
@@ -224,11 +225,59 @@ class FigureCanvasAnyWidget(FigureCanvasBase):
         self.widget.width = int(self.figure.bbox.width)
         self.widget.height = int(self.figure.bbox.height)
 
+        # Collect axes bounding boxes for clipping
+        axes_bboxes = []
+        for ax in self.figure.axes:
+            bbox = ax.bbox
+            axes_bboxes.append(
+                {
+                    "x0": bbox.x0,
+                    "y0": bbox.y0,
+                    "x1": bbox.x1,
+                    "y1": bbox.y1,
+                }
+            )
+
         # Send the scene with the figure height for coordinate conversion
-        self.widget.set_scene(renderer.scene, renderer.height)
+        self.widget.set_scene(renderer.scene, renderer.height, axes_bboxes)
 
     def _repr_mimebundle_(self, **kwargs):
         return self.widget._repr_mimebundle_(**kwargs)
+
+    def enable_zoom(self, enable=True):
+        """Enable or disable zoom functionality"""
+        self.widget.zoom_enabled = enable
+
+    def _handle_zoom(self, x0, x1, y0, y1):
+        """Handle zoom event from JavaScript"""
+        print(f"_handle_zoom called: x0={x0}, x1={x1}, y0={y0}, y1={y1}")
+
+        # Convert display coordinates to data coordinates
+        # Find the axes that contain the zoom region
+        for ax in self.figure.axes:
+            # Get axes bbox in display coordinates
+            bbox = ax.bbox
+            print(f"Axes bbox: x0={bbox.x0}, x1={bbox.x1}, y0={bbox.y0}, y1={bbox.y1}")
+            print(
+                f"Checking: {x0} >= {bbox.x0} and {x1} <= {bbox.x1} and {y0} >= {bbox.y0} and {y1} <= {bbox.y1}"
+            )
+
+            # Check if zoom region overlaps with this axes
+            if x0 >= bbox.x0 and x1 <= bbox.x1 and y0 >= bbox.y0 and y1 <= bbox.y1:
+                # Transform display coords to data coords
+                try:
+                    p0 = ax.transData.inverted().transform([[x0, y0]])[0]
+                    p1 = ax.transData.inverted().transform([[x1, y1]])[0]
+
+                    # Set new limits
+                    ax.set_xlim(p0[0], p1[0])
+                    ax.set_ylim(p0[1], p1[1])
+
+                    # Redraw
+                    self.draw()
+                    break
+                except Exception as e:
+                    print(f"Zoom error: {e}")
 
 
 class FigureManagerAnyWidget(FigureManagerBase):
