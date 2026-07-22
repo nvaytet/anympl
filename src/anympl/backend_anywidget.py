@@ -326,6 +326,51 @@ class RendererAnyWidget(RendererBase):
         )
 
 
+class NavigationToolbarAnyWidget:
+    """Simple navigation toolbar for the anywidget backend"""
+
+    def __init__(self, canvas):
+        self.canvas = canvas
+        self.mode = ''  # Current mode: '', 'pan', 'zoom'
+        self._views = []  # Stack for home/back/forward
+        self._positions = []  # Stack position for back/forward
+        self._nav_stack_index = -1
+
+    def _update_mode(self):
+        """Update widget with current mode"""
+        self.canvas.widget.toolbar_mode = self.mode
+
+    def home(self):
+        """Restore the original view"""
+        self.mode = ''
+        self._update_mode()
+
+        # Reset all axes to their original limits
+        for ax in self.canvas.figure.axes:
+            ax.autoscale()
+        self.canvas.draw()
+
+    def pan(self, *args):
+        """Toggle pan mode"""
+        if self.mode == 'pan':
+            self.mode = ''
+            self.canvas.widget.pan_enabled = False
+        else:
+            self.mode = 'pan'
+            self.canvas.widget.pan_enabled = True
+        self._update_mode()
+
+    def zoom(self, *args):
+        """Toggle zoom mode"""
+        if self.mode == 'zoom':
+            self.mode = ''
+            self.canvas.widget.zoom_enabled = False
+        else:
+            self.mode = 'zoom'
+            self.canvas.widget.zoom_enabled = True
+        self._update_mode()
+
+
 class FigureCanvasAnyWidget(FigureCanvasBase):
     def __init__(self, figure):
         super().__init__(figure)
@@ -335,7 +380,7 @@ class FigureCanvasAnyWidget(FigureCanvasBase):
 
         # Initialize required attributes for event handling
         self.manager = None  # Will be set if needed
-        self.toolbar = None  # No toolbar for this backend
+        self.toolbar = NavigationToolbarAnyWidget(self)
 
     def get_renderer(self, cleared=False):
         w = int(self.figure.bbox.width)
@@ -481,6 +526,35 @@ class FigureCanvasAnyWidget(FigureCanvasBase):
                     break
                 except Exception as e:
                     print(f"Zoom error: {e}")
+
+    def _handle_pan(self, x0, y0, x1, y1):
+        """Handle pan event from JavaScript"""
+        # x0, y0 is start position, x1, y1 is end position (display coords)
+        for ax in self.figure.axes:
+            bbox = ax.bbox
+
+            # Check if pan started in this axes
+            if bbox.x0 <= x0 <= bbox.x1 and bbox.y0 <= y0 <= bbox.y1:
+                try:
+                    # Convert display coords to data coords
+                    start = ax.transData.inverted().transform([[x0, y0]])[0]
+                    end = ax.transData.inverted().transform([[x1, y1]])[0]
+
+                    # Calculate the pan delta in data coordinates
+                    dx = start[0] - end[0]
+                    dy = start[1] - end[1]
+
+                    # Update limits
+                    xlim = ax.get_xlim()
+                    ylim = ax.get_ylim()
+                    ax.set_xlim(xlim[0] + dx, xlim[1] + dx)
+                    ax.set_ylim(ylim[0] + dy, ylim[1] + dy)
+
+                    # Redraw
+                    self.draw()
+                    break
+                except Exception as e:
+                    print(f"Pan error: {e}")
 
 
 class FigureManagerAnyWidget(FigureManagerBase):

@@ -1,5 +1,67 @@
 export function render({ model, el }) {
 
+    // Create toolbar
+    const toolbar = document.createElement("div");
+    toolbar.style.cssText = `
+        display: flex;
+        gap: 5px;
+        padding: 5px;
+        background-color: #f0f0f0;
+        border-bottom: 1px solid #ccc;
+        font-family: sans-serif;
+    `;
+
+    // Create toolbar buttons
+    const buttons = [
+        { id: "home", label: "Home", icon: "🏠" },
+        { id: "pan", label: "Pan", icon: "✋" },
+        { id: "zoom", label: "Zoom", icon: "🔍" },
+        { id: "prev", label: "Prev", icon: "◀", disabled: true },
+        { id: "next", label: "Next", icon: "▶", disabled: true },
+        { id: "save", label: "Save", icon: "💾", disabled: true }
+    ];
+
+    let currentMode = model.get("toolbar_mode") || "";
+
+    buttons.forEach(btn => {
+        const button = document.createElement("button");
+        button.textContent = btn.icon + " " + btn.label;
+        button.disabled = btn.disabled || false;
+        button.style.cssText = `
+            padding: 5px 10px;
+            cursor: ${btn.disabled ? "not-allowed" : "pointer"};
+            background-color: white;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            font-size: 12px;
+        `;
+
+        if (!btn.disabled) {
+            button.addEventListener("click", () => {
+                model.send({ type: "toolbar_action", action: btn.id });
+            });
+
+            button.addEventListener("mouseenter", () => {
+                if (!button.disabled) {
+                    button.style.backgroundColor = "#e0e0e0";
+                }
+            });
+
+            button.addEventListener("mouseleave", () => {
+                const isActive = (btn.id === "pan" && currentMode === "pan") ||
+                    (btn.id === "zoom" && currentMode === "zoom");
+                button.style.backgroundColor = isActive ? "#d0d0ff" : "white";
+            });
+        }
+
+        toolbar.appendChild(button);
+
+        // Store button reference for mode updates
+        button.dataset.action = btn.id;
+    });
+
+    el.appendChild(toolbar);
+
     const canvas = document.createElement("canvas");
 
     canvas.width = model.get("width");
@@ -19,6 +81,11 @@ export function render({ model, el }) {
     let isZooming = false;
     let zoomStart = null;
     let zoomCurrent = null;
+
+    // Pan state
+    let panEnabled = model.get("pan_enabled") || false;
+    let isPanning = false;
+    let panStart = null;
 
     // Event enabled states
     let buttonPressEnabled = model.get("button_press_enabled") || false;
@@ -200,6 +267,39 @@ export function render({ model, el }) {
     // Watch for zoom_enabled changes
     model.on("change:zoom_enabled", () => {
         zoomEnabled = model.get("zoom_enabled");
+        if (zoomEnabled) {
+            canvas.style.cursor = "crosshair";
+        } else if (panEnabled) {
+            canvas.style.cursor = "grab";
+        } else {
+            canvas.style.cursor = "default";
+        }
+    });
+
+    // Watch for pan_enabled changes
+    model.on("change:pan_enabled", () => {
+        panEnabled = model.get("pan_enabled");
+        if (panEnabled) {
+            canvas.style.cursor = "grab";
+        } else if (zoomEnabled) {
+            canvas.style.cursor = "crosshair";
+        } else {
+            canvas.style.cursor = "default";
+        }
+    });
+
+    // Watch for toolbar mode changes
+    model.on("change:toolbar_mode", () => {
+        currentMode = model.get("toolbar_mode");
+        // Update button styles based on mode
+        toolbar.querySelectorAll("button").forEach(btn => {
+            const action = btn.dataset.action;
+            if (action === "pan" || action === "zoom") {
+                const isActive = action === currentMode;
+                btn.style.backgroundColor = isActive ? "#d0d0ff" : "white";
+                btn.style.fontWeight = isActive ? "bold" : "normal";
+            }
+        });
     });
 
     // Watch for event enabled changes
@@ -224,6 +324,10 @@ export function render({ model, el }) {
         if (zoomEnabled) {
             zoomStart = { x: canvasX, y: canvasY };
             isZooming = true;
+        } else if (panEnabled) {
+            panStart = { x: canvasX, y: canvasY };
+            isPanning = true;
+            canvas.style.cursor = "grabbing";
         } else if (buttonPressEnabled) {
             // Send button_press_event to Python
             const mplX = canvasX;
@@ -250,6 +354,23 @@ export function render({ model, el }) {
             if (currentScene && currentFigureHeight) {
                 drawScene(currentScene, currentFigureHeight, currentAxesBboxes);
             }
+        } else if (isPanning && panStart) {
+            // Send pan update to Python
+            const mplX0 = panStart.x;
+            const mplY0 = currentFigureHeight - panStart.y;
+            const mplX1 = canvasX;
+            const mplY1 = currentFigureHeight - canvasY;
+
+            model.send({
+                type: "pan",
+                x0: mplX0,
+                y0: mplY0,
+                x1: mplX1,
+                y1: mplY1
+            });
+
+            // Update pan start for next move
+            panStart = { x: canvasX, y: canvasY };
         } else if (motionNotifyEnabled) {
             // Throttle motion events to reduce lag
             const now = Date.now();
@@ -304,6 +425,11 @@ export function render({ model, el }) {
             if (currentScene && currentFigureHeight) {
                 drawScene(currentScene, currentFigureHeight, currentAxesBboxes);
             }
+        } else if (isPanning) {
+            // End panning
+            isPanning = false;
+            panStart = null;
+            canvas.style.cursor = "grab";
         } else if (buttonReleaseEnabled) {
             // Send button_release_event to Python
             const mplX = canvasX;
@@ -325,6 +451,13 @@ export function render({ model, el }) {
             zoomCurrent = null;
             if (currentScene && currentFigureHeight) {
                 drawScene(currentScene, currentFigureHeight, currentAxesBboxes);
+            }
+        }
+        if (isPanning) {
+            isPanning = false;
+            panStart = null;
+            if (panEnabled) {
+                canvas.style.cursor = "grab";
             }
         }
     });
