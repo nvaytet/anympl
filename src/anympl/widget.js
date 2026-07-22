@@ -84,6 +84,33 @@ export function render({ model, el }) {
                 const canvasY = figureHeight - cmd.y - cmd.height;
 
                 ctx.putImageData(imgData, canvasX, canvasY);
+            } else if (cmd.type === "markers") {
+                // Draw scatter plot markers
+                const vertices = cmd.vertices;
+                const size = cmd.marker_size;
+                const faceColor = cmd.facecolor;
+                const edgeColor = cmd.edgecolor;
+
+                for (let i = 0; i < vertices.length; i++) {
+                    const x = vertices[i][0];
+                    const y = figureHeight - vertices[i][1];
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, size / 2, 0, 2 * Math.PI);
+
+                    // Fill
+                    if (faceColor && faceColor[3] > 0) {  // Check alpha
+                        ctx.fillStyle = `rgba(${faceColor[0] * 255}, ${faceColor[1] * 255}, ${faceColor[2] * 255}, ${faceColor[3]})`;
+                        ctx.fill();
+                    }
+
+                    // Stroke
+                    if (cmd.linewidth > 0 && edgeColor && edgeColor[3] > 0) {
+                        ctx.strokeStyle = `rgba(${edgeColor[0] * 255}, ${edgeColor[1] * 255}, ${edgeColor[2] * 255}, ${edgeColor[3]})`;
+                        ctx.lineWidth = cmd.linewidth;
+                        ctx.stroke();
+                    }
+                }
             }
         }
 

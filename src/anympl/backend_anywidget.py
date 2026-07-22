@@ -210,6 +210,66 @@ class RendererAnyWidget(RendererBase):
             }
         )
 
+    def draw_path_collection(
+        self,
+        gc,
+        master_transform,
+        paths,
+        all_transforms,
+        offsets,
+        offset_trans,
+        facecolors,
+        edgecolors,
+        linewidths,
+        linestyles,
+        antialiaseds,
+        urls,
+        offset_position,
+    ):
+        """
+        Draw a collection of paths (used by scatter plots)
+        This is more efficient than drawing each marker individually
+        """
+        # Transform the offsets (scatter point positions) to display coordinates
+        if len(offsets):
+            offsets = offset_trans.transform(offsets)
+
+        # For simplicity, we'll assume all markers are the same
+        # Get the first path and its transform if available
+        if len(paths) > 0:
+            path = paths[0]
+            # Get marker size from the transform matrix
+            if len(all_transforms) > 0:
+                marker_size = all_transforms[0].get_matrix()[0, 0]
+            else:
+                marker_size = 5.0  # Default size
+        else:
+            return  # No paths to draw
+
+        # Get colors - they can be single values or arrays
+        if len(facecolors) == 1:
+            facecolor = facecolors[0]
+        else:
+            facecolor = facecolors[0] if len(facecolors) > 0 else (0, 0, 0, 1)
+
+        if len(edgecolors) == 1:
+            edgecolor = edgecolors[0]
+        else:
+            edgecolor = edgecolors[0] if len(edgecolors) > 0 else (0, 0, 0, 1)
+
+        linewidth = linewidths[0] if len(linewidths) > 0 else 1.0
+
+        self.scene.append(
+            {
+                "type": "markers",
+                "vertices": offsets.tolist(),
+                "marker_size": marker_size,
+                "facecolor": facecolor,
+                "edgecolor": edgecolor,
+                "linewidth": linewidth,
+            }
+        )
+
 
 class FigureCanvasAnyWidget(FigureCanvasBase):
     def __init__(self, figure):
