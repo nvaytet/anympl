@@ -381,6 +381,78 @@ class FigureCanvasAnyWidget(FigureCanvasBase):
         """Enable or disable zoom functionality"""
         self.widget.zoom_enabled = enable
 
+    def mpl_connect(self, event_name, callback):
+        """Connect a callback to a matplotlib event"""
+        if not hasattr(self, '_event_callbacks'):
+            self._event_callbacks = {}
+
+        if event_name not in self._event_callbacks:
+            self._event_callbacks[event_name] = []
+
+        # Simple connection ID (just use length as ID)
+        cid = len(self._event_callbacks.get(event_name, []))
+        self._event_callbacks[event_name].append((cid, callback))
+
+        # Enable the corresponding event type in the widget
+        if event_name == "button_press_event":
+            self.widget.button_press_enabled = True
+        elif event_name == "button_release_event":
+            self.widget.button_release_enabled = True
+        elif event_name == "motion_notify_event":
+            self.widget.motion_notify_enabled = True
+
+        return cid
+
+    def mpl_disconnect(self, cid):
+        """Disconnect a callback (not implemented yet)"""
+        pass
+
+    def _handle_mouse_event(self, event_data):
+        """Handle mouse events from JavaScript"""
+        from matplotlib.backend_bases import MouseEvent
+
+        event_type = event_data["type"]
+        x = event_data["x"]  # Display coordinates
+        y = event_data["y"]  # Display coordinates
+        button = event_data.get("button", 1)
+
+        # Find which axes contains this point
+        inaxes = None
+        for ax in self.figure.axes:
+            bbox = ax.bbox
+            if bbox.x0 <= x <= bbox.x1 and bbox.y0 <= y <= bbox.y1:
+                inaxes = ax
+                break
+
+        # Convert display coordinates to data coordinates
+        xdata = ydata = None
+        if inaxes is not None:
+            try:
+                data_coords = inaxes.transData.inverted().transform([[x, y]])[0]
+                xdata, ydata = data_coords
+            except:
+                pass
+
+        # Create the matplotlib event object
+        event = MouseEvent(
+            event_type,
+            self,
+            x,
+            y,
+            button=button,
+            key=None,
+            dblclick=False,
+            guiEvent=None,
+        )
+        event.inaxes = inaxes
+        event.xdata = xdata
+        event.ydata = ydata
+
+        # Dispatch to registered callbacks
+        if hasattr(self, '_event_callbacks') and event_type in self._event_callbacks:
+            for cid, callback in self._event_callbacks[event_type]:
+                callback(event)
+
     def _handle_zoom(self, x0, x1, y0, y1):
         """Handle zoom event from JavaScript"""
         # Convert display coordinates to data coordinates

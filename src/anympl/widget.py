@@ -23,6 +23,9 @@ class PlotWidget(anywidget.AnyWidget):
     width = traitlets.Int(800).tag(sync=True)
     height = traitlets.Int(600).tag(sync=True)
     zoom_enabled = traitlets.Bool(False).tag(sync=True)
+    button_press_enabled = traitlets.Bool(False).tag(sync=True)
+    button_release_enabled = traitlets.Bool(False).tag(sync=True)
+    motion_notify_enabled = traitlets.Bool(False).tag(sync=True)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -39,6 +42,16 @@ class PlotWidget(anywidget.AnyWidget):
                 self.canvas._handle_zoom(
                     content["x0"], content["x1"], content["y0"], content["y1"]
                 )
+            elif (
+                content.get("type")
+                in [
+                    "motion_notify_event",
+                    "button_press_event",
+                    "button_release_event",
+                ]
+                and self.canvas is not None
+            ):
+                self.canvas._handle_mouse_event(content)
         except Exception as e:
             print(f"Error handling message: {e}")
 

@@ -20,6 +20,15 @@ export function render({ model, el }) {
     let zoomStart = null;
     let zoomCurrent = null;
 
+    // Event enabled states
+    let buttonPressEnabled = model.get("button_press_enabled") || false;
+    let buttonReleaseEnabled = model.get("button_release_enabled") || false;
+    let motionNotifyEnabled = model.get("motion_notify_enabled") || false;
+
+    // Throttle mouse motion events to reduce lag
+    let lastMotionEventTime = 0;
+    const motionEventThrottle = 20; // milliseconds
+
     // Function to draw the scene
     function drawScene(scene, figureHeight, axesBboxes) {
         // Clear the canvas
@@ -193,65 +202,119 @@ export function render({ model, el }) {
         zoomEnabled = model.get("zoom_enabled");
     });
 
-    // Mouse event handlers for zoom
-    canvas.addEventListener("mousedown", (e) => {
-        if (!zoomEnabled) return;
+    // Watch for event enabled changes
+    model.on("change:button_press_enabled", () => {
+        buttonPressEnabled = model.get("button_press_enabled");
+    });
 
+    model.on("change:button_release_enabled", () => {
+        buttonReleaseEnabled = model.get("button_release_enabled");
+    });
+
+    model.on("change:motion_notify_enabled", () => {
+        motionNotifyEnabled = model.get("motion_notify_enabled");
+    });
+
+    // Mouse event handlers
+    canvas.addEventListener("mousedown", (e) => {
         const rect = canvas.getBoundingClientRect();
-        zoomStart = {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
-        };
-        isZooming = true;
+        const canvasX = e.clientX - rect.left;
+        const canvasY = e.clientY - rect.top;
+
+        if (zoomEnabled) {
+            zoomStart = { x: canvasX, y: canvasY };
+            isZooming = true;
+        } else if (buttonPressEnabled) {
+            // Send button_press_event to Python
+            const mplX = canvasX;
+            const mplY = currentFigureHeight - canvasY;
+
+            model.send({
+                type: "button_press_event",
+                x: mplX,
+                y: mplY,
+                button: e.button + 1  // JS uses 0-indexed, matplotlib uses 1-indexed
+            });
+        }
     });
 
     canvas.addEventListener("mousemove", (e) => {
-        if (!isZooming) return;
-
         const rect = canvas.getBoundingClientRect();
-        zoomCurrent = {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
-        };
+        const canvasX = e.clientX - rect.left;
+        const canvasY = e.clientY - rect.top;
 
-        // Redraw with zoom box
-        if (currentScene && currentFigureHeight) {
-            drawScene(currentScene, currentFigureHeight, currentAxesBboxes);
+        if (isZooming) {
+            zoomCurrent = { x: canvasX, y: canvasY };
+
+            // Redraw with zoom box
+            if (currentScene && currentFigureHeight) {
+                drawScene(currentScene, currentFigureHeight, currentAxesBboxes);
+            }
+        } else if (motionNotifyEnabled) {
+            // Throttle motion events to reduce lag
+            const now = Date.now();
+            if (now - lastMotionEventTime < motionEventThrottle) {
+                return;
+            }
+            lastMotionEventTime = now;
+
+            // Send motion_notify_event to Python
+            // Convert canvas coords to matplotlib display coords
+            const mplX = canvasX;
+            const mplY = currentFigureHeight - canvasY;
+
+            model.send({
+                type: "motion_notify_event",
+                x: mplX,
+                y: mplY,
+                button: 0
+            });
         }
     });
 
     canvas.addEventListener("mouseup", (e) => {
-        if (!isZooming) return;
-
         const rect = canvas.getBoundingClientRect();
-        const endX = e.clientX - rect.left;
-        const endY = e.clientY - rect.top;
+        const canvasX = e.clientX - rect.left;
+        const canvasY = e.clientY - rect.top;
 
-        // Send zoom coordinates to Python (in matplotlib coordinates)
-        // Convert from canvas coords to matplotlib coords
-        const x0_mpl = Math.min(zoomStart.x, endX);
-        const x1_mpl = Math.max(zoomStart.x, endX);
-        const y0_canvas = Math.max(zoomStart.y, endY);
-        const y1_canvas = Math.min(zoomStart.y, endY);
-        const y0_mpl = currentFigureHeight - y0_canvas;
-        const y1_mpl = currentFigureHeight - y1_canvas;
+        if (isZooming) {
+            // Send zoom coordinates to Python (in matplotlib coordinates)
+            // Convert from canvas coords to matplotlib coords
+            const x0_mpl = Math.min(zoomStart.x, canvasX);
+            const x1_mpl = Math.max(zoomStart.x, canvasX);
+            const y0_canvas = Math.max(zoomStart.y, canvasY);
+            const y1_canvas = Math.min(zoomStart.y, canvasY);
+            const y0_mpl = currentFigureHeight - y0_canvas;
+            const y1_mpl = currentFigureHeight - y1_canvas;
 
-        model.send({
-            type: "zoom",
-            x0: x0_mpl,
-            x1: x1_mpl,
-            y0: y0_mpl,
-            y1: y1_mpl
-        });
+            model.send({
+                type: "zoom",
+                x0: x0_mpl,
+                x1: x1_mpl,
+                y0: y0_mpl,
+                y1: y1_mpl
+            });
 
-        // Reset zoom state
-        isZooming = false;
-        zoomStart = null;
-        zoomCurrent = null;
+            // Reset zoom state
+            isZooming = false;
+            zoomStart = null;
+            zoomCurrent = null;
 
-        // Redraw without zoom box
-        if (currentScene && currentFigureHeight) {
-            drawScene(currentScene, currentFigureHeight, currentAxesBboxes);
+            // Redraw without zoom box
+            if (currentScene && currentFigureHeight) {
+                drawScene(currentScene, currentFigureHeight, currentAxesBboxes);
+            }
+        } else if (buttonReleaseEnabled) {
+            // Send button_release_event to Python
+            const mplX = canvasX;
+            const mplY = currentFigureHeight - canvasY;
+
+            model.send({
+                type: "button_release_event",
+                x: mplX,
+                y: mplY,
+                button: e.button + 1
+            });
         }
     });
 
