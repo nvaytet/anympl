@@ -333,6 +333,10 @@ class FigureCanvasAnyWidget(FigureCanvasBase):
         self.widget = PlotWidget()
         self.widget.canvas = self  # Link widget back to canvas
 
+        # Initialize required attributes for event handling
+        self.manager = None  # Will be set if needed
+        self.toolbar = None  # No toolbar for this backend
+
     def get_renderer(self, cleared=False):
         w = int(self.figure.bbox.width)
         h = int(self.figure.bbox.height)
