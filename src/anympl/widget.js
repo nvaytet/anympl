@@ -85,15 +85,24 @@ export function render({ model, el }) {
 
                 ctx.putImageData(imgData, canvasX, canvasY);
             } else if (cmd.type === "markers") {
-                // Draw scatter plot markers
+                // Draw scatter plot markers with varying sizes/colors
                 const vertices = cmd.vertices;
-                const size = cmd.marker_size;
-                const faceColor = cmd.facecolor;
-                const edgeColor = cmd.edgecolor;
+
+                // Handle both single and per-marker properties
+                const sizes = cmd.marker_sizes || [cmd.marker_size || 5.0];
+                const faceColors = cmd.facecolors || [cmd.facecolor];
+                const edgeColors = cmd.edgecolors || [cmd.edgecolor];
+                const linewidths = cmd.linewidths || [cmd.linewidth || 1.0];
 
                 for (let i = 0; i < vertices.length; i++) {
                     const x = vertices[i][0];
                     const y = figureHeight - vertices[i][1];
+
+                    // Get properties for this marker (use modulo for cycling if needed)
+                    const size = sizes[i % sizes.length];
+                    const faceColor = faceColors[i % faceColors.length];
+                    const edgeColor = edgeColors[i % edgeColors.length];
+                    const linewidth = linewidths[i % linewidths.length];
 
                     ctx.beginPath();
                     ctx.arc(x, y, size / 2, 0, 2 * Math.PI);
@@ -105,9 +114,9 @@ export function render({ model, el }) {
                     }
 
                     // Stroke
-                    if (cmd.linewidth > 0 && edgeColor && edgeColor[3] > 0) {
+                    if (linewidth > 0 && edgeColor && edgeColor[3] > 0) {
                         ctx.strokeStyle = `rgba(${edgeColor[0] * 255}, ${edgeColor[1] * 255}, ${edgeColor[2] * 255}, ${edgeColor[3]})`;
-                        ctx.lineWidth = cmd.linewidth;
+                        ctx.lineWidth = linewidth;
                         ctx.stroke();
                     }
                 }

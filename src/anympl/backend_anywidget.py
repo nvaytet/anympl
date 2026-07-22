@@ -111,6 +111,7 @@
 # FigureCanvas = FigureCanvasAnyWidget
 # FigureManager = FigureManagerAnyWidget
 
+import numpy as np
 
 from matplotlib.backend_bases import (
     FigureCanvasBase,
@@ -228,45 +229,99 @@ class RendererAnyWidget(RendererBase):
     ):
         """
         Draw a collection of paths (used by scatter plots)
-        This is more efficient than drawing each marker individually
+        This handles varying sizes and colors per marker
         """
+
         # Transform the offsets (scatter point positions) to display coordinates
         if len(offsets):
             offsets = offset_trans.transform(offsets)
 
-        # For simplicity, we'll assume all markers are the same
-        # Get the first path and its transform if available
-        if len(paths) > 0:
-            path = paths[0]
-            # Get marker size from the transform matrix
-            if len(all_transforms) > 0:
-                marker_size = all_transforms[0].get_matrix()[0, 0]
-            else:
-                marker_size = 5.0  # Default size
-        else:
+        if len(paths) == 0 or len(offsets) == 0:
             return  # No paths to draw
 
-        # Get colors - they can be single values or arrays
-        if len(facecolors) == 1:
-            facecolor = facecolors[0]
+        # Extract marker sizes from transforms
+        marker_sizes = []
+        if len(all_transforms) > 0:
+            # all_transforms can be either transform objects or a numpy array of matrices
+            if hasattr(all_transforms[0], 'get_matrix'):
+                # It's a list of transform objects
+                marker_sizes = [t.get_matrix()[0, 0] for t in all_transforms]
+            else:
+                # It's a numpy array - each row is a 3x3 matrix flattened or similar
+                # The transform contains the scale in the matrix
+                if isinstance(all_transforms, np.ndarray):
+                    # If it's a 3D array of shape (n, 3, 3), extract [0,0] from each
+                    if all_transforms.ndim == 3:
+                        marker_sizes = all_transforms[:, 0, 0].tolist()
+                    else:
+                        # Fallback: use default size
+                        marker_sizes = [5.0] * len(offsets)
+                else:
+                    marker_sizes = [5.0] * len(offsets)
         else:
-            facecolor = facecolors[0] if len(facecolors) > 0 else (0, 0, 0, 1)
+            marker_sizes = [5.0] * len(offsets)
 
-        if len(edgecolors) == 1:
-            edgecolor = edgecolors[0]
+        # Ensure we have the right number of sizes
+        if len(marker_sizes) == 1:
+            marker_sizes = marker_sizes * len(offsets)
+        elif len(marker_sizes) != len(offsets):
+            marker_sizes = (
+                [marker_sizes[0]] * len(offsets)
+                if len(marker_sizes) > 0
+                else [5.0] * len(offsets)
+            )
+
+        # Handle colors - can be single or per-marker
+        if len(facecolors) == len(offsets):
+            facecolors_list = (
+                facecolors.tolist()
+                if hasattr(facecolors, 'tolist')
+                else list(facecolors)
+            )
+        elif len(facecolors) == 1:
+            facecolors_list = [
+                facecolors[0].tolist()
+                if hasattr(facecolors[0], 'tolist')
+                else facecolors[0]
+            ] * len(offsets)
         else:
-            edgecolor = edgecolors[0] if len(edgecolors) > 0 else (0, 0, 0, 1)
+            facecolors_list = [(0, 0, 0, 1)] * len(offsets)
 
-        linewidth = linewidths[0] if len(linewidths) > 0 else 1.0
+        if len(edgecolors) == len(offsets):
+            edgecolors_list = (
+                edgecolors.tolist()
+                if hasattr(edgecolors, 'tolist')
+                else list(edgecolors)
+            )
+        elif len(edgecolors) == 1:
+            edgecolors_list = [
+                edgecolors[0].tolist()
+                if hasattr(edgecolors[0], 'tolist')
+                else edgecolors[0]
+            ] * len(offsets)
+        else:
+            edgecolors_list = [(0, 0, 0, 1)] * len(offsets)
+
+        # Handle linewidths
+        if len(linewidths) == len(offsets):
+            linewidths_list = (
+                linewidths.tolist()
+                if hasattr(linewidths, 'tolist')
+                else list(linewidths)
+            )
+        elif len(linewidths) == 1:
+            linewidths_list = [linewidths[0]] * len(offsets)
+        else:
+            linewidths_list = [1.0] * len(offsets)
 
         self.scene.append(
             {
                 "type": "markers",
                 "vertices": offsets.tolist(),
-                "marker_size": marker_size,
-                "facecolor": facecolor,
-                "edgecolor": edgecolor,
-                "linewidth": linewidth,
+                "marker_sizes": marker_sizes,  # Note: plural for varying sizes
+                "facecolors": facecolors_list,  # Note: plural for varying colors
+                "edgecolors": edgecolors_list,  # Note: plural for varying colors
+                "linewidths": linewidths_list,  # Note: plural for varying widths
             }
         )
 
