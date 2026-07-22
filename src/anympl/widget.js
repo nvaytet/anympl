@@ -67,6 +67,23 @@ export function render({ model, el }) {
                 ctx.strokeStyle = `rgb(${c[0] * 255}, ${c[1] * 255}, ${c[2] * 255})`;
 
                 ctx.stroke();
+            } else if (cmd.type === "image") {
+                // Draw images (imshow, pcolormesh, etc.)
+                const imgData = ctx.createImageData(cmd.width, cmd.height);
+
+                // Copy RGBA data - check if it's already 0-255 or needs conversion
+                const maxVal = Math.max(...cmd.data.slice(0, 1000)); // Sample first values
+                const scaleFactor = maxVal <= 1.0 ? 255 : 1;
+
+                for (let i = 0; i < cmd.data.length; i++) {
+                    imgData.data[i] = cmd.data[i] * scaleFactor;
+                }
+
+                // Convert matplotlib coords (bottom-left) to canvas (top-left)
+                const canvasX = cmd.x;
+                const canvasY = figureHeight - cmd.y - cmd.height;
+
+                ctx.putImageData(imgData, canvasX, canvasY);
             }
         }
 

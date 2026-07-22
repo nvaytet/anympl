@@ -141,10 +141,6 @@ class RendererAnyWidget(RendererBase):
     ):
         vertices = transform.transform(path.vertices)
 
-        # Debug: print first vertex of first few paths
-        if len(self.scene) < 3:
-            print(f"PATH vertices[0]: {vertices[0] if len(vertices) > 0 else 'empty'}")
-
         self.scene.append(
             {
                 "type": "path",
@@ -165,7 +161,6 @@ class RendererAnyWidget(RendererBase):
         ismath=False,
         mtext=None,
     ):
-        print(f"TEXT: '{s}' at x={x}, y={y}, height={self.height}")
         self.scene.append(
             {
                 "type": "text",
@@ -191,6 +186,29 @@ class RendererAnyWidget(RendererBase):
         height = size
         descent = size * 0.2
         return width, height, descent
+
+    def draw_image(self, gc, x, y, im):
+        """
+        Draw an image (for imshow, pcolormesh, etc.)
+        im is an RGBA image with shape (height, width, 4)
+        (x, y) is the position in display coordinates
+        """
+        # Convert the image array to a list for JSON serialization
+        h, w = im.shape[:2]
+
+        # Flatten RGBA data to 1D list
+        image_data = im.flatten().tolist()
+
+        self.scene.append(
+            {
+                "type": "image",
+                "x": x,
+                "y": y,
+                "width": w,
+                "height": h,
+                "data": image_data,
+            }
+        )
 
 
 class FigureCanvasAnyWidget(FigureCanvasBase):
@@ -250,17 +268,11 @@ class FigureCanvasAnyWidget(FigureCanvasBase):
 
     def _handle_zoom(self, x0, x1, y0, y1):
         """Handle zoom event from JavaScript"""
-        print(f"_handle_zoom called: x0={x0}, x1={x1}, y0={y0}, y1={y1}")
-
         # Convert display coordinates to data coordinates
         # Find the axes that contain the zoom region
         for ax in self.figure.axes:
             # Get axes bbox in display coordinates
             bbox = ax.bbox
-            print(f"Axes bbox: x0={bbox.x0}, x1={bbox.x1}, y0={bbox.y0}, y1={bbox.y1}")
-            print(
-                f"Checking: {x0} >= {bbox.x0} and {x1} <= {bbox.x1} and {y0} >= {bbox.y0} and {y1} <= {bbox.y1}"
-            )
 
             # Check if zoom region overlaps with this axes
             if x0 >= bbox.x0 and x1 <= bbox.x1 and y0 >= bbox.y0 and y1 <= bbox.y1:
